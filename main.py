@@ -104,6 +104,7 @@ def logout():
 
 @app.route('/univ', defaults={'id': None})
 @app.route('/univ/<int:id>')
+@login_required
 def get_university(id):
     c=get_db_connection()
     cursor=c.cursor(dictionary=True)
@@ -203,6 +204,7 @@ def update_university(id):
 
 @app.route('/field', defaults={'id': None})
 @app.route('/field/<int:id>')
+@login_required
 def get_fields(id):
     c=get_db_connection()
     cursor=c.cursor(dictionary=True)
@@ -419,6 +421,7 @@ def update_category(id):
 
 @app.route('/keyword', defaults={'id': None})
 @app.route('/keyword/<int:id>')
+@login_required
 def get_keyword(id):
     c=get_db_connection()
     cursor=c.cursor(dictionary=True)
@@ -490,6 +493,7 @@ def update_keyword(id):
         return jsonify({"error": "keyword_name field required"}), 400
 
     c = get_db_connection()
+
     cursor = c.cursor(dictionary=True)
 
 
@@ -511,6 +515,80 @@ def update_keyword(id):
     finally:
         cursor.close()
         c.close()
+
+
+################### RESEARCHER CRUD #############################
+
+@app.route('/profile-update',methods=['POST'])
+@login_required
+def update_researcher():
+
+    user_id=session['user_id']
+    data=request.json
+    print(user_id)
+
+    allowed_fields = ['first_name','last_name','email', 'password','university_id','field_id']
+
+    updates = {}
+    for field in allowed_fields:
+        if field in data:
+            updates[field] = data[field]
+
+    if not updates:
+        return jsonify({"error": "No valid fields provided"}), 400
+
+    if 'password' in updates:
+        updates['password'] = bcrypt.generate_password_hash(updates['password']).decode('utf-8')
+
+    c=get_db_connection()
+    cursor=c.cursor()
+    print(c)
+    set_clause = ", ".join(f"{key} = %s" for key in updates.keys())
+    values = tuple(updates.values()) + (str(user_id),)
+
+
+    try:
+        query=f'UPDATE RESEARCHER SET {set_clause} WHERE researcher_id=%s'
+        cursor.execute(query,values)
+        c.commit()
+        cursor.close()
+        c.close()
+        return jsonify({'message':'Profile updated successfully'})
+    except mysql.connector.IntegrityError as e:
+        cursor.close()
+        c.close()
+        return jsonify({"error":"error while inserting data","e":str(e)})
+
+
+@app.route('/profile-delete',methods=['DELETE'])
+@login_required
+def delete_researcher():
+    user_id=session['user_id']
+    data=request.json
+
+    password=data['password']
+
+    if not password:
+        return jsonify({"error":"password field required"})
+
+    c=get_db_connection()
+    cursor=c.cursor(dictionary=True)
+
+    cursor.execute('SELECT * FROM RESEARCHER WHERE researcher_id=%s',(user_id,))
+    user=cursor.fetchone()
+
+
+
+    if user and bcrypt.check_password_hash(user['password'], password):
+        cursor.execute('DELETE FROM RESEARCHER WHERE researcher_id=%s',(user_id,))
+        c.commit()
+        session.clear()
+        cursor.close()
+        c.close()
+        return jsonify({"message":"researcher deleted successfully,you have been logged out"})
+    cursor.close()
+    c.close()
+    return jsonify({"error": "Invalid password"}), 401
 
 
 
