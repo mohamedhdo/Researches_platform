@@ -525,7 +525,7 @@ def update_researcher():
 
     user_id=session['user_id']
     data=request.json
-    print(user_id)
+
 
     allowed_fields = ['first_name','last_name','email', 'password','university_id','field_id']
 
@@ -542,7 +542,7 @@ def update_researcher():
 
     c=get_db_connection()
     cursor=c.cursor()
-    print(c)
+
     set_clause = ", ".join(f"{key} = %s" for key in updates.keys())
     values = tuple(updates.values()) + (str(user_id),)
 
@@ -590,6 +590,110 @@ def delete_researcher():
     c.close()
     return jsonify({"error": "Invalid password"}), 401
 
+############### POST CRUD #########################################################
+
+@app.route('/post',methods=['POST'])
+@login_required
+def create_post():
+    data=request.json
+    user_id=session['user_id']
+    title=data.get('title')
+    description=data.get('description')
+    content=data.get('content')
+    categories=data.get('categories')
+    keywords=data.get('keywords')
+
+    if not all([title,description,content,categories,keywords]):
+        return jsonify({"error":"all fields are required"})
+
+    c=get_db_connection()
+    cursor=c.cursor()
+    try:
+        cursor.execute('INSERT INTO POST (researcher_id,title,description,content) VALUES (%s,%s,%s,%s)',(user_id,title,description,content,))
+        post_id = cursor.lastrowid
+        for category in categories:
+            cursor.execute('INSERT INTO POST_CATEGORY (post_id,category_id) VALUES (%s,%s)',(post_id,category,))
+
+        for keyword in keywords:
+            cursor.execute('INSERT INTO POST_KEYWORDS (post_id,keyword_id) VALUES (%s,%s)', (post_id, keyword,))
+
+        c.commit()
+        return {"message":"Post created successfully"}
+    except mysql.connector.IntegrityError as e:
+        return jsonify({"error":str(e)})
+    finally:
+        cursor.close()
+        c.close()
+
+@app.route('/post/<int:id>',methods=['DELETE'])
+@login_required
+def delete_post(id):
+    user_id=session['user_id']
+
+    c=get_db_connection()
+    cursor=c.cursor(dictionary=True)
+    try:
+        cursor.execute('SELECT * FROM POST WHERE post_id=%s',(id,))
+        post=cursor.fetchone()
+        user=post['researcher_id']
+        if user != user_id:
+            return jsonify({"error":"You can only delete posts that you created"})
+
+        cursor.execute('DELETE FROM POST WHERE post_id=%s',(id,))
+        c.commit()
+        return jsonify({"message":"Post deleted successfully"})
+    except mysql.connector.IntegrityError as e:
+        return jsonify({"error": str(e)})
+    finally:
+        cursor.close()
+        c.close()
+
+@app.route('/post-update/<int:id>',methods=['POST'])
+def update_post(id):
+    user_id = session['user_id']
+    data=request.json
+    c = get_db_connection()
+    cursor = c.cursor(dictionary=True)
+    try:
+        cursor.execute('SELECT * FROM POST WHERE post_id=%s', (id,))
+        post = cursor.fetchone()
+        user = post['researcher_id']
+        if user != user_id:
+            return jsonify({"error": "You can only delete posts that you created"})
+        title = data.get('title')
+        description = data.get('description')
+        content = data.get('content')
+        categories = data.get('categories')
+        keywords = data.get('keywords')
+
+        fields = {
+            "title": title,
+            "description": description,
+            "content": content,
+            # "categories": categories,
+            # "keywords": keywords
+        }
+
+
+        updated = {key: value for key, value in fields.items() if value is not None}
+        set_clause = ", ".join(f"{key} = %s" for key in updated.keys())
+        values = tuple(updated.values()) + (id,)
+
+        cursor.execute(f'UPDATE POST SET {set_clause} WHERE post_id=%s',values)
+        cursor.execute('DELETE FROM POST_CATEGORY WHERE post_id=%s',(id,))
+        cursor.execute('DELETE FROM POST_KEYWORDS WHERE post_id=%s', (id,))
+        for category in categories:
+            cursor.execute('INSERT INTO POST_CATEGORY (post_id,category_id) VALUES (%s,%s)',(id,category,))
+
+        for keyword in keywords:
+            cursor.execute('INSERT INTO POST_KEYWORDS (post_id,keyword_id) VALUES (%s,%s)', (id, keyword,))
+        c.commit()
+        return jsonify({"message":"Post updated successfully"})
+    except mysql.connector.IntegrityError as e:
+        return jsonify({"error":str(e)})
+    finally:
+        cursor.close()
+        c.close()
 
 
 
