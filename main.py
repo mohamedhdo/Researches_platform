@@ -696,6 +696,74 @@ def update_post(id):
         c.close()
 
 
+########## LIKE FEATURE##################
+@app.route('/like/<int:id>',methods=['POST'])
+@login_required
+def like_unlike(id):
+    user_id=session['user_id']
+    c=get_db_connection()
+    cursor=c.cursor()
+    try:
+        cursor.execute('SELECT * FROM POST_LIKE WHERE researcher_id=%s AND post_id=%s',(user_id,id,))
+        like=cursor.fetchone()
+        if not like:
+            cursor.execute('INSERT INTO POST_LIKE (researcher_id,post_id) VALUES (%s,%s)',(user_id,id,))
+            c.commit()
+            return jsonify({"message":"Liked the post"})
+        else:
+            cursor.execute('DELETE FROM POST_LIKE WHERE researcher_id=%s AND post_id=%s',(user_id,id,))
+            c.commit()
+        return jsonify({"message":"Unliked the post"})
+    except mysql.connector.IntegrityError as e:
+        return jsonify({"error":str(e)})
+    finally:
+        cursor.close()
+        c.close()
+
+
+@app.route('/comment/<int:id>',methods=['POST'])
+def create_comment(id):
+    user_id=session['user_id']
+    data=request.json
+    comment=data['content']
+
+    if not comment:
+        return jsonify({"error": " you should provide the content of the comment"})
+
+    c=get_db_connection()
+    cursor=c.cursor()
+    try:
+        cursor.execute('INSERT INTO COMMENT (researcher_id,post_id,content) VALUES (%s,%s,%s)',(user_id,id,comment,))
+        c.commit()
+        return jsonify({"message":"comment added successfully"})
+    except mysql.connector.IntegrityError as e:
+        return  jsonify({"error":str(e)})
+    finally:
+        cursor.close()
+        c.close()
+
+@app.route('/comment/<int:id>',methods=['DELETE'])
+def delete_comment(id):
+
+    c=get_db_connection()
+    cursor=c.cursor(dictionary=True)
+    user_id=session['user_id']
+    cursor.execute('SELECT * FROM COMMENT WHERE comment_id=%s',(id,))
+    comment=cursor.fetchone()
+    if not comment:
+        return jsonify({"error":"comment does not exist"})
+    if user_id!=comment['researcher_id']:
+        return jsonify({"error":"You can only delete comments that you created"})
+    try:
+        cursor.execute('DELETE FROM COMMENT WHERE comment_id=%s',(id,))
+        c.commit()
+        return jsonify({"message":"Comment deleted successfully"})
+    except mysql.connector.IntegrityError as e:
+        return jsonify({"error":str(e)})
+    finally:
+        cursor.close()
+        c.close()
+
 
 
 
